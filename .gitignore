@@ -1,0 +1,9 @@
+# Nothing here is built: the package ships the sources it runs.
+node_modules/
+.tmp-test-*/
+*.log
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
