@@ -20,12 +20,12 @@
 
 | 半邊 | 跑在哪 | 做什麼 |
 |---|---|---|
-| `index.js` | dsh host 行程 | 寫 URL 檔、放寬瀏覽器 session cookie、註冊兩條 VS Code 路由 |
-| `lib/client.js` | 瀏覽器（`dsh.client` 組合包） | 把「開檔案」改打那兩條路由；把複製的字往上送給外層頁面 |
+| `index.js` | dsh host 行程 | 寫 URL 檔、放寬瀏覽器 session cookie、回答「開檔案去哪」那條判定路由 |
+| `lib/client.js` | 瀏覽器（`dsh.client` 組合包） | 把「開檔案」與複製的字往上送給外層頁面 |
 
 **登入網址，落在檔案裡。** 這個行程在服務 GUI 的時候，把帶權杖的網址寫進一個純文字檔 —— 啟動器、supervisor 或腳本讀檔案，不用撈 stdout。位元組先寫進同目錄的暫存名再 rename 上去，所以輪詢的讀者不會讀到寫一半的內容。預設位置是 Web profile 目錄下的 `web-url.txt`。
 
-**點檔案，交給 VS Code 開。** 文件預覽是產品對「給我看這個檔案」的答案，但當頁面已經在 VS Code 面板裡時，那個答案是錯的：檔案該在編輯器裡，只隔一個視窗。設了 `openFileIn: vscode` 之後，每一次點擊都交給 `Code.exe -r -g "<檔案>:<行號>"` —— 就是一個人會自己敲的 CLI 指令 —— 落在剛才點擊的那個視窗。任何失敗（找不到 VS Code、啟動被拒、session 的工作區問不到、檔案不見了）都退回文件預覽，所以點了不會沒反應。
+**點檔案，交給 VS Code 開。** 文件預覽是產品對「給我看這個檔案」的答案，但當頁面已經在 VS Code 面板裡時，那個答案是錯的：檔案該在編輯器裡，只隔一個視窗。設了 `openFileIn: vscode` 之後，每一次點擊都往上送給外層頁面 —— `{ type: "open-file", path, line? }` —— 由面板的擴充原生開啟，落在剛才點擊的那個視窗。host 行程完全不 spawn `Code.exe`、也不探測 VS Code 裝在哪：判斷「點擊來自哪個視窗」是擴充的事，命令列啟動只能用猜的。檔案叫不出路徑的點擊（session 問不到、檔案不見了）退回文件預覽，所以點了不會沒反應。
 
 **複製，送到真正的剪貼簿。** webview 沒辦法把剪貼簿權限往下轉授給第二層的跨來源 iframe，所以面板裡的頁面自己寫不了系統剪貼簿。前端因此掛在每次複製都會經過的兩道門上 —— 複製鈕走 `navigator.clipboard.writeText`，鍵盤與右鍵走 `copy` 事件 —— 再 `postMessage` `{ type: "copy", text }` 給父層；VS Code 擴充把它轉到 extension host，那裡的寫入不會被拒。需要 [rainfishs/dsh-vscode](https://github.com/rainfishs/dsh-vscode)。沒有外層（直接用瀏覽器開 GUI）時，複製照原本的路走，完全沒動。
 
@@ -36,10 +36,11 @@
 | 需要什麼 | 為什麼 |
 |---|---|
 | DeepSeek Harness（`@deepseek-ai/dsh`） | 這個組合包裝進去的執行環境；`dsh plugin` 需要 `PATH` 上的 `pnpm` |
-| VS Code | 檔案轉交與剪貼簿橋接用 |
-| [rainfishs/dsh-vscode](https://github.com/rainfishs/dsh-vscode) | 剪貼簿橋接的另一半；沒裝的話複製只留在頁面裡 |
+| [rainfishs/dsh-vscode](https://github.com/rainfishs/dsh-vscode) | VS Code 那一側：負責嵌入 GUI、接收兩種往上丟的訊息；沒裝的話檔案留在文件預覽、複製留在頁面裡 |
 
 沒有 build 步驟、也沒有自己的依賴：套件交出去的就是它跑的原始碼。
+
+**同一台機器，兩半都在。** 往上丟的 `path` 是 dsh 行程自己看到的路徑，所以 VS Code 要開得到同一個檔案系統 —— 本機 `dsh web` 配本機視窗，或 Remote／WSL／容器視窗的遠端就是 dsh 跑的那台。本機 dsh 配遠端視窗，會丟出那個遠端碰不到的路徑。
 
 ## 安裝
 
@@ -70,15 +71,13 @@ dsh --profile web --dump-config
 | 鍵 | 預設 | 意思 |
 |---|---|---|
 | `path` | `null` → `%DSH_HOME%\profiles\web\web-url.txt` | 登入網址要寫到哪。 |
-| `openFileIn` | `null` → `preview` | `vscode` = 點檔案交給 VS Code；其他值都是文件預覽。 |
-| `vscodeExecutablePath` | `null` → 自動偵測 | `Code.exe`（macOS／Linux 是 `code`）的絕對路徑，或 `PATH` 上的指令名。 |
-| `reuseWindow` | `null` → 重用 | `true` 帶 `-r`，重用最後活躍的視窗 —— 就是剛才點擊的那個。`false` 交給 CLI 決定。 |
+| `openFileIn` | `null` → `preview` | `vscode` = 把點檔案往上丟給外層頁面；其他值都是文件預覽。 |
+
+「開在哪、怎麼開」是擴充的事，所以由擴充自己的設定決定 —— `window.openFoldersInNewWindow`、`window.revealIfOpen` 之類。DSH 的一列沒有辦法伸進另一個應用程式的設定裡，這裡也就不重複它們。
 
 patch 會整份取代目標行的 `config`，所以每個要留的鍵都得重寫一次。
 
 **Windows 路徑用單引號。** YAML 雙引號裡 `\U` 是轉義字元，`"D:\path\to\web-url.txt"` 會直接解析失敗。
-
-**自動偵測順序。** 設定值優先；再來是安裝器的固定位置（Windows：`%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe`、`%ProgramFiles%\Microsoft VS Code\Code.exe`，加上 Insiders 的名字；macOS：`/Applications/Visual Studio Code.app/...`；Linux：`PATH` 上的 `code`）；最後才是 Windows 使用者優先的 `App Paths` 機碼。設定了卻跑不起來的路徑會被回報，不會被默默換掉。
 
 **什麼時候要重啟 dsh。**
 
@@ -107,11 +106,24 @@ dsh web: login URL written to <path>
 - 行程正常關閉時檔案會被刪掉。被硬殺（工作管理員、SIGKILL）才會留下來，而且那個權杖已經不能用了。
 - 寫入是原子的，輪詢的讀者不會讀到寫一半的內容。
 
-## 路由
+## 路由與訊息
 
-前端每次點擊都讀一次判定：`GET /dsh-vscode-bridge/config`；要開檔就 `POST /dsh-vscode-bridge/open-file`。兩條都先過產品自己的信任圍籬（`connection.requestRejection`：Host/Origin 圍籬加登入 cookie），才會動到檔案或行程；開檔那條在找到任何東西之前，先在線上交驗它驗得到的 —— 媒體型別、64 KB 的 body 上限、位址文法。
+前端每次點擊都讀一次判定：`GET /dsh-vscode-bridge/config`。這條路由先過產品自己的信任圍籬（`connection.requestRejection`：Host/Origin 圍籬加登入 cookie），回答 `{ "openFileIn": "vscode" | "preview" }` —— 整條路由就這些。**已經沒有開檔路由了**：檔案不再經過 host。
 
-開檔路由只認 `dsh-resource://file/…` 位址，兩種 scope：`session/<id>/<path>` 以該 session 的工作區根解析，`absolute/<path>` 自己帶著完整路徑。它啟動的行程是 detached、丟掉 stdio、環境變數洗過（憑證形狀的名字與 `DSH_*` 都拿掉），再加一秒的觀察窗 —— 把 spawn 失敗或立刻非零退出變成一個答案。
+開檔改成往框架樹上丟，跟複製走同一條路。頁面被內嵌時（`window.parent !== window`）就往父層丟：
+
+```js
+window.parent.postMessage({ type: 'open-file', path: 'C:/work/notes.md', line: 42, address: 'dsh-resource://file/…' }, '*')
+```
+
+| 欄位 | 意思 |
+|---|---|
+| `type` | `"open-file"` |
+| `path` | 檔案的 host 絕對路徑。一律用 `/` 分隔，所以 Windows 路徑長成 `C:/work/notes.md`。有行號時會帶。 |
+| `line` | 1-based 行號；opener 沒帶就沒有這個欄位。 |
+| `address` | 原本的 `dsh-resource://file/…` 位址，給接收端記 log 或想自己解析時用。 |
+
+接收的擴充把 `vscode.Uri.file(path)` 開起來、跳到 `line`。沒有外層的頁面（直接用瀏覽器開 GUI）什麼都不丟，照原本走文件預覽；叫不出路徑的點擊也一樣。`path` 是送出前先解好的：`absolute` 位址本來就帶著完整路徑；`session` 位址帶相對路徑時，透過 host 的 `remote.workspaceFiles.stat` 解析 —— host 手上有那個 session 的工作區根，只有存檔沒有活著的 session 也答得出來。解析兩秒內沒回來，這次點擊就退回預覽。
 
 ## 疑難排解
 
@@ -119,8 +131,8 @@ dsh web: login URL written to <path>
 |---|---|
 | 沒出現 URL 檔 | 那一列在不在 `dsh.profile.bundles`（`dsh --profile web --dump-config`），以及 host 有沒有印 `dsh web: login URL written to …`。 |
 | 檔案裡的網址被拒絕 | 權杖只屬於一次啟動。被硬殺留下的檔案是舊的，重開 `dsh web`。 |
-| 點檔案還是開側欄預覽 | `openFileIn: vscode` 沒有生效 —— 通常是 row id 對不上，patch 只碰它指名的那一列。 |
-| 點檔案完全沒反應 | 連退回也失敗了：看瀏覽器 console 的 `[dsh-vscode-bridge]` 行，以及 host log 的 `no VS Code launcher found`；偵測不到你的安裝就設 `vscodeExecutablePath`。 |
+| 點檔案還是開側欄預覽 | `openFileIn: vscode` 沒有生效 —— 通常是 row id 對不上，patch 只碰它指名的那一列 —— 或這個頁面沒有被內嵌。 |
+| 點檔案完全沒反應 | 點擊已經丟給面板，面板那一側沒接：確認擴充有裝、有啟用，並看瀏覽器 console 的 `[dsh-vscode-bridge]` 警告。host 兩秒內叫不出路徑的檔案是退回預覽（不是沒反應），所以完全沒反應代表連預覽那條也失敗了。 |
 | 複製鈕沒進系統剪貼簿 | VS Code 擴充沒裝或沒啟用，或頁面不在 webview 裡。 |
 | 面板裡每個 `/api` 都回 401 | 放寬 cookie 的那半沒載入 —— bundle 不在 profile 裡，或 app 的 cookie 形狀變了。 |
 | 改了設定卻沒生效 | patch 會整份取代目標行的 `config`，要重寫每個鍵；`lib/client.js` 的改動要重啟 dsh。 |
@@ -149,7 +161,7 @@ dsh plugin --profile web add link:/absolute/path/to/dsh-vscode-bridge
 
 ## 狀態
 
-早期預覽，`0.2.x`。這個組合包刻意保持小：寫一個檔案、回答兩條路由，沒有要長成通用的 VS Code 整合。
+早期預覽，`0.2.x`。這個組合包刻意保持小：寫一個檔案、回答一條判定路由、往上丟兩種訊息。它不啟動任何程式，也沒有自己的 VS Code 偵測。
 
 ## 授權
 

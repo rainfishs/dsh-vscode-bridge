@@ -1,7 +1,7 @@
 # The dsh-vscode-bridge bundle layer.
 #
 # What it mounts: the login-URL file writer, the widened browser session cookie,
-# and the two routes a clicked file takes to reach VS Code. Applied after
+# and the verdict route behind the file hand-off. Applied after
 # @deepseek-ai/dsh-base and @deepseek-ai/dsh-web-app, because
 # `dsh plugin add` appends a newly installed bundle to the end of the profile's
 # `dsh.profile.bundles` list and layers apply in that order. Nothing here
@@ -32,17 +32,12 @@
 
         # Where a click on a file in the Web GUI goes:
         #   null / anything else — the right Sidebar's document preview (default)
-        #   vscode               — hand the file to VS Code (`Code.exe -r -g`)
+        #   vscode               — post the file up to the page that embeds the
+        #                          GUI; the panel's extension opens it natively
         # The browser half reads this per click, so a live patch reload of this
         # row takes effect on the next click, without a page refresh.
+        #
+        # How an open lands (reusing the window, where it splits) is the
+        # extension's own settings. This row never launches anything, so it has
+        # no executable path and no window flag to configure.
         openFileIn: null
-
-        # The VS Code command to launch: an absolute path to `Code.exe` (or
-        # `code` on macOS/Linux), or a bare command name found on PATH. Empty
-        # means detect it — the installer's own locations first, then the
-        # user-first Windows `App Paths` registry.
-        vscodeExecutablePath: null
-
-        # Reuse the last active VS Code window, which is the one the click came
-        # from. `false` lets the CLI choose (it may open a new window).
-        reuseWindow: null
