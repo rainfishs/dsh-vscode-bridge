@@ -25,7 +25,7 @@ Both answers belong in the DSH runtime rather than in the launcher. This bundle 
 
 **The login URL, in a file.** While this process serves the GUI, the authenticated URL is written to one text file, so a launcher, supervisor, or script reads a file instead of scraping stdout. The bytes land in a sibling temporary name and are renamed into place, so a polling reader never sees half a line. The default destination is `web-url.txt` in the Web profile directory.
 
-**Clicking a file opens it in VS Code.** The document preview is the product's answer to "show me this file", and it is the wrong one when the page is already running inside a VS Code panel: the file belongs in the editor, one window away. With `openFileIn: vscode`, a click is posted to the page that embeds the GUI — `{ type: "open-file", path, line? }` — and the panel's extension opens it natively, in the window the click came from. The host process never spawns `Code.exe` and never probes for a VS Code install: resolving which window a click came from is the extension's job, not something a CLI launch can guess. A click whose file cannot be named (a Session this page cannot reach, a file that is gone) falls back to the document preview, so a click never does nothing.
+**Clicking a file opens it in VS Code.** The document preview is the product's answer to "show me this file", and it is the wrong one when the page is already running inside a VS Code panel: the file belongs in the editor, one window away. This is the default, no configuration needed: a click is posted to the page that embeds the GUI — `{ type: "open-file", path, line? }` — and the panel's extension opens it natively, in the window the click came from. Name `openFileIn: preview` to keep the shipped document preview instead. The host process never spawns `Code.exe` and never probes for a VS Code install: resolving which window a click came from is the extension's job, not something a CLI launch can guess. A click whose file cannot be named (a Session this page cannot reach, a file that is gone) falls back to the document preview, so a click never does nothing.
 
 **Copy goes to the real clipboard.** A webview cannot delegate its clipboard permission to a second, cross-origin iframe, so the page inside the panel cannot write the system clipboard by itself. The browser half therefore hooks the two doors every copy goes through — `navigator.clipboard.writeText` for the copy controls, the `copy` event for the keyboard and a context menu — and posts `{ type: "copy", text }` to its parent frame; the VS Code extension relays it to the extension host, where the write is never denied. Needs [rainfishs/dsh-vscode](https://github.com/rainfishs/dsh-vscode). A page with no parent (the GUI opened directly in a browser) keeps its original copy path, untouched.
 
@@ -65,13 +65,13 @@ Keys go in the profile's own patch layer, `%DSH_HOME%\profiles\web\cordis.patch.
 ```yaml
 - id: dsh-vscode-bridge
   config:
-    openFileIn: vscode
+    openFileIn: preview
 ```
 
 | Key | Default | Meaning |
 |---|---|---|
 | `path` | `null` → `%DSH_HOME%\profiles\web\web-url.txt` | Where the login URL is written. |
-| `openFileIn` | `null` → `preview` | `vscode` posts file clicks up to the embedding page; anything else keeps the document preview. |
+| `openFileIn` | `null` → `vscode` | Where a file click goes. The default hands the file to the embedding page, which a VS Code panel opens natively; `preview` keeps the shipped document preview instead. |
 
 Opens are the extension's business, so its own settings decide how they land — `window.openFoldersInNewWindow`, `window.revealIfOpen`, and so on. A DSH row cannot reach into another application's settings, so nothing here repeats them.
 
@@ -108,7 +108,7 @@ dsh web: login URL written to <path>
 
 ## The routes and the messages
 
-The browser half reads its per-click verdict from `GET /dsh-vscode-bridge/config`. The route passes the product's own trust fence (`connection.requestRejection`: the Host/Origin fence plus the login cookie) and answers `{ "openFileIn": "vscode" | "preview" }` — that is the whole route. There is no open route any more: the file never travels through the host.
+The browser half reads its per-click verdict from `GET /dsh-vscode-bridge/config`. The route passes the product's own trust fence (`connection.requestRejection`: the Host/Origin fence plus the login cookie) and answers `{ "openFileIn": "vscode" | "preview" }` — that is the whole route, and it answers `vscode` unless the row names `preview`. There is no open route any more: the file never travels through the host.
 
 The open travels up the frame tree instead, exactly as a copy does. A page that is embedded (`window.parent !== window`) posts to its parent:
 
@@ -131,7 +131,7 @@ The receiving extension opens `vscode.Uri.file(path)` and reveals `line`. A page
 |---|---|
 | No URL file appears | Whether the row is in `dsh.profile.bundles` (`dsh --profile web --dump-config`), and whether the host logged `dsh web: login URL written to …`. |
 | The URL in the file is rejected | The token belongs to one launch. A file left behind by a hard kill is stale; restart `dsh web`. |
-| Clicking a file still opens the Sidebar preview | `openFileIn: vscode` is not in effect — usually a row id that does not match, since a patch only reaches the row it names — or the page is not embedded. |
+| Clicking a file still opens the Sidebar preview | The page is not embedded (a plain browser tab has no extension to hand the file to), or `openFileIn: preview` is in effect. |
 | Clicking a file does nothing | The click was handed to the panel and nothing there answered: check that the extension is installed and active, and the browser console for `[dsh-vscode-bridge]` warnings. A file the Host could not name within two seconds falls back to the preview instead, so nothing at all means the preview failed too. |
 | Copy buttons do not reach the system clipboard | The VS Code extension is not installed or not active, or the page is not embedded in a webview. |
 | Every `/api` call inside the VS Code panel answers 401 | The cookie-widening part of the row did not load — the bundle is missing from the profile, or the app's cookie shape changed. |

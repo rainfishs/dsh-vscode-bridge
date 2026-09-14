@@ -25,7 +25,7 @@
 
 **登入網址，落在檔案裡。** 這個行程在服務 GUI 的時候，把帶權杖的網址寫進一個純文字檔 —— 啟動器、supervisor 或腳本讀檔案，不用撈 stdout。位元組先寫進同目錄的暫存名再 rename 上去，所以輪詢的讀者不會讀到寫一半的內容。預設位置是 Web profile 目錄下的 `web-url.txt`。
 
-**點檔案，交給 VS Code 開。** 文件預覽是產品對「給我看這個檔案」的答案，但當頁面已經在 VS Code 面板裡時，那個答案是錯的：檔案該在編輯器裡，只隔一個視窗。設了 `openFileIn: vscode` 之後，每一次點擊都往上送給外層頁面 —— `{ type: "open-file", path, line? }` —— 由面板的擴充原生開啟，落在剛才點擊的那個視窗。host 行程完全不 spawn `Code.exe`、也不探測 VS Code 裝在哪：判斷「點擊來自哪個視窗」是擴充的事，命令列啟動只能用猜的。檔案叫不出路徑的點擊（session 問不到、檔案不見了）退回文件預覽，所以點了不會沒反應。
+**點檔案，交給 VS Code 開。** 文件預覽是產品對「給我看這個檔案」的答案，但當頁面已經在 VS Code 面板裡時，那個答案是錯的：檔案該在編輯器裡，只隔一個視窗。這是**預設行為，不用設定**：每一次點擊都往上送給外層頁面 —— `{ type: "open-file", path, line? }` —— 由面板的擴充原生開啟，落在剛才點擊的那個視窗；想改回隨附的文件預覽就填 `openFileIn: preview`。host 行程完全不 spawn `Code.exe`、也不探測 VS Code 裝在哪：判斷「點擊來自哪個視窗」是擴充的事，命令列啟動只能用猜的。檔案叫不出路徑的點擊（session 問不到、檔案不見了）退回文件預覽，所以點了不會沒反應。
 
 **複製，送到真正的剪貼簿。** webview 沒辦法把剪貼簿權限往下轉授給第二層的跨來源 iframe，所以面板裡的頁面自己寫不了系統剪貼簿。前端因此掛在每次複製都會經過的兩道門上 —— 複製鈕走 `navigator.clipboard.writeText`，鍵盤與右鍵走 `copy` 事件 —— 再 `postMessage` `{ type: "copy", text }` 給父層；VS Code 擴充把它轉到 extension host，那裡的寫入不會被拒。需要 [rainfishs/dsh-vscode](https://github.com/rainfishs/dsh-vscode)。沒有外層（直接用瀏覽器開 GUI）時，複製照原本的路走，完全沒動。
 
@@ -65,13 +65,13 @@ dsh --profile web --dump-config
 ```yaml
 - id: dsh-vscode-bridge
   config:
-    openFileIn: vscode
+    openFileIn: preview
 ```
 
 | 鍵 | 預設 | 意思 |
 |---|---|---|
 | `path` | `null` → `%DSH_HOME%\profiles\web\web-url.txt` | 登入網址要寫到哪。 |
-| `openFileIn` | `null` → `preview` | `vscode` = 把點檔案往上丟給外層頁面；其他值都是文件預覽。 |
+| `openFileIn` | `null` → `vscode` | 點檔案去哪。預設把檔案交給外層頁面（VS Code 面板會原生開起來）；填 `preview` 就改用隨附的文件預覽。 |
 
 「開在哪、怎麼開」是擴充的事，所以由擴充自己的設定決定 —— `window.openFoldersInNewWindow`、`window.revealIfOpen` 之類。DSH 的一列沒有辦法伸進另一個應用程式的設定裡，這裡也就不重複它們。
 
@@ -108,7 +108,7 @@ dsh web: login URL written to <path>
 
 ## 路由與訊息
 
-前端每次點擊都讀一次判定：`GET /dsh-vscode-bridge/config`。這條路由先過產品自己的信任圍籬（`connection.requestRejection`：Host/Origin 圍籬加登入 cookie），回答 `{ "openFileIn": "vscode" | "preview" }` —— 整條路由就這些。**已經沒有開檔路由了**：檔案不再經過 host。
+前端每次點擊都讀一次判定：`GET /dsh-vscode-bridge/config`。這條路由先過產品自己的信任圍籬（`connection.requestRejection`：Host/Origin 圍籬加登入 cookie），回答 `{ "openFileIn": "vscode" | "preview" }` —— 整條路由就這些，而且除非那一列填 `preview`，否則一律回 `vscode`。**已經沒有開檔路由了**：檔案不再經過 host。
 
 開檔改成往框架樹上丟，跟複製走同一條路。頁面被內嵌時（`window.parent !== window`）就往父層丟：
 
@@ -131,7 +131,7 @@ window.parent.postMessage({ type: 'open-file', path: 'C:/work/notes.md', line: 4
 |---|---|
 | 沒出現 URL 檔 | 那一列在不在 `dsh.profile.bundles`（`dsh --profile web --dump-config`），以及 host 有沒有印 `dsh web: login URL written to …`。 |
 | 檔案裡的網址被拒絕 | 權杖只屬於一次啟動。被硬殺留下的檔案是舊的，重開 `dsh web`。 |
-| 點檔案還是開側欄預覽 | `openFileIn: vscode` 沒有生效 —— 通常是 row id 對不上，patch 只碰它指名的那一列 —— 或這個頁面沒有被內嵌。 |
+| 點檔案還是開側欄預覽 | 這個頁面沒有被內嵌（直接用瀏覽器分頁開沒有擴充可以接），或設定成 `openFileIn: preview`。 |
 | 點檔案完全沒反應 | 點擊已經丟給面板，面板那一側沒接：確認擴充有裝、有啟用，並看瀏覽器 console 的 `[dsh-vscode-bridge]` 警告。host 兩秒內叫不出路徑的檔案是退回預覽（不是沒反應），所以完全沒反應代表連預覽那條也失敗了。 |
 | 複製鈕沒進系統剪貼簿 | VS Code 擴充沒裝或沒啟用，或頁面不在 webview 裡。 |
 | 面板裡每個 `/api` 都回 401 | 放寬 cookie 的那半沒載入 —— bundle 不在 profile 裡，或 app 的 cookie 形狀變了。 |

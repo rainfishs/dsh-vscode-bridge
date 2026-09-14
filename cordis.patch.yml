@@ -31,9 +31,11 @@
         path: null
 
         # Where a click on a file in the Web GUI goes:
-        #   null / anything else — the right Sidebar's document preview (default)
-        #   vscode               — post the file up to the page that embeds the
+        #   null / vscode        — post the file up to the page that embeds the
         #                          GUI; the panel's extension opens it natively
+        #                          (default; a parentless page has no extension
+        #                          to post to, so a browser tab keeps the preview)
+        #   preview              — always keep the right Sidebar's document preview
         # The browser half reads this per click, so a live patch reload of this
         # row takes effect on the next click, without a page refresh.
         #

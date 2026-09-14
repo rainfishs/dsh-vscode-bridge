@@ -188,12 +188,16 @@ const CONFIG_ROUTE = '/dsh-vscode-bridge/config'
 
 /**
  * Where a click on a file goes.
+ *
+ * The hand-off is the default, because the page it matters for is the one
+ * inside a VS Code panel and a click there is asking for the editor. A row that
+ * wants the shipped document preview back names it.
  * @param config - the row's config.
- * @returns `vscode` when the row asks for the hand-off; everything else is the
- * shipped document preview.
+ * @returns `preview` only when the row asks for it; everything else is the
+ * hand-off to the embedding page.
  */
 export function configuredOpenFileIn(config) {
-  return config?.openFileIn === 'vscode' ? 'vscode' : 'preview'
+  return config?.openFileIn === 'preview' ? 'preview' : 'vscode'
 }
 
 /** JSON response (no-store: the verdict follows a live config reload). */
