@@ -125,6 +125,16 @@ window.parent.postMessage({ type: 'open-file', path: 'C:/work/notes.md', line: 4
 
 接收的擴充把 `vscode.Uri.file(path)` 開起來、跳到 `line`。沒有外層的頁面（直接用瀏覽器開 GUI）什麼都不丟，照原本走文件預覽；叫不出路徑的點擊也一樣。`path` 是送出前先解好的：`absolute` 位址本來就帶著完整路徑；`session` 位址帶相對路徑時，透過 host 的 `remote.workspaceFiles.stat` 解析 —— host 手上有那個 session 的工作區根，只有存檔沒有活著的 session 也答得出來。解析兩秒內沒回來，這次點擊就退回預覽。
 
+### 外部連結
+
+訊息裡的連結是帶 `target="_blank"` 的錨點，而 webview 擋掉那個彈窗：點了完全沒反應。所以外部連結也照同一條路往上丟，由接收的擴充請編輯器自己跳確認：
+
+```js
+window.parent.postMessage({ type: 'open-link', url: 'https://example.com/…' }, '*')
+```
+
+只認 `http` 與 `https`，而且 origin 要和頁面自己的不同 —— app 自己的路由、`mailto:`、`dsh-resource://` 位址都維持產品原本的處理。掛兩道門，app 用哪種方式開連結都攔得到：document 的捕捉層 `click`（shell 實際走的就是這道，它把連結渲染成錨點、讓瀏覽器自己跟隨），以及 `window.open` 的 patch（新分頁路線）。同一次點擊不會送兩次；沒有外層的頁面完全不動。
+
 ## 疑難排解
 
 | 症狀 | 先檢查什麼 |
@@ -134,6 +144,7 @@ window.parent.postMessage({ type: 'open-file', path: 'C:/work/notes.md', line: 4
 | 點檔案還是開側欄預覽 | 這個頁面沒有被內嵌（直接用瀏覽器分頁開沒有擴充可以接），或設定成 `openFileIn: preview`。 |
 | 點檔案完全沒反應 | 點擊已經丟給面板，面板那一側沒接：確認擴充有裝、有啟用，並看瀏覽器 console 的 `[dsh-vscode-bridge]` 警告。host 兩秒內叫不出路徑的檔案是退回預覽（不是沒反應），所以完全沒反應代表連預覽那條也失敗了。 |
 | 複製鈕沒進系統剪貼簿 | VS Code 擴充沒裝或沒啟用，或頁面不在 webview 裡。 |
+| 點外部連結還是沒反應 | 擴充沒裝或沒啟用（沒有 `open-link` 的接收端），或這個頁面沒有被內嵌。輸出面板（來源 DSH）沒有 `[OpenExternal]` 那行，代表這半邊沒送出去。 |
 | 面板裡每個 `/api` 都回 401 | 放寬 cookie 的那半沒載入 —— bundle 不在 profile 裡，或 app 的 cookie 形狀變了。 |
 | 改了設定卻沒生效 | patch 會整份取代目標行的 `config`，要重寫每個鍵；`lib/client.js` 的改動要重啟 dsh。 |
 

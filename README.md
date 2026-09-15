@@ -125,6 +125,16 @@ window.parent.postMessage({ type: 'open-file', path: 'C:/work/notes.md', line: 4
 
 The receiving extension opens `vscode.Uri.file(path)` and reveals `line`. A page with no parent — the GUI opened directly in a browser — posts nothing and keeps the document preview; so does a page whose file cannot be named. The `path` is resolved before the post: an `absolute` address carries it already, and a `session` address that carries a relative one is resolved through the Host (`remote.workspaceFiles.stat`), which holds that Session's workspace root — a persisted Session still answers. If that resolution does not come back within two seconds, the click falls back to the preview.
 
+### External links
+
+A link in a message is an anchor with `target="_blank"`, and a webview blocks the popup that would open: the click does nothing at all. The page therefore posts an external link upwards the same way, and the receiving extension opens it with the editor's own confirmation:
+
+```js
+window.parent.postMessage({ type: 'open-link', url: 'https://example.com/…' }, '*')
+```
+
+Only `http` and `https` qualify, and only when the origin differs from the page's own — a route, a `mailto:`, a `dsh-resource://` address, or anything else keeps whatever the product does with it. Two doors are hooked, so a link is caught whichever way the app opens it: a capture-phase `click` on the document (the door the shell actually uses, since it renders anchors and lets the browser follow them), and a `window.open` patch for the new-tab route. The same click is never posted twice, and a page with no parent is left entirely alone.
+
 ## Troubleshooting
 
 | Symptom | What to check |
@@ -134,6 +144,7 @@ The receiving extension opens `vscode.Uri.file(path)` and reveals `line`. A page
 | Clicking a file still opens the Sidebar preview | The page is not embedded (a plain browser tab has no extension to hand the file to), or `openFileIn: preview` is in effect. |
 | Clicking a file does nothing | The click was handed to the panel and nothing there answered: check that the extension is installed and active, and the browser console for `[dsh-vscode-bridge]` warnings. A file the Host could not name within two seconds falls back to the preview instead, so nothing at all means the preview failed too. |
 | Copy buttons do not reach the system clipboard | The VS Code extension is not installed or not active, or the page is not embedded in a webview. |
+| Clicking an external link does nothing | Same two reasons: no extension to receive `open-link`, or the page is not embedded. No `[OpenExternal]` line in the output panel (source **DSH**) means this half never posted. |
 | Every `/api` call inside the VS Code panel answers 401 | The cookie-widening part of the row did not load — the bundle is missing from the profile, or the app's cookie shape changed. |
 | Config changes have no effect | A patch replaces the whole `config` of the row it targets; restate every key. `lib/client.js` changes need a dsh restart. |
 
