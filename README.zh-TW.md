@@ -40,6 +40,8 @@
 
 沒有 build 步驟、也沒有自己的依賴：套件交出去的就是它跑的原始碼。
 
+`0.3.0` 是 DSH 0.2 的相容性調整。對 0.2.1 驗證過：`webServer.register`／`port`、`connection.authenticatedUrl`／`authorizeIndex`／`requestRejection`、exact 路由的 handler 形狀，以及瀏覽器側的 `sidebarRight`／`remote.workspaceFiles` 名稱，語意都跟 0.1 一樣。唯一行為改變是 cookie 改寫：0.2 在 TLS listener 下自己會補 `; Secure`，所以現在只留一個 `Secure`，而且沒有 `SameSite` 的 cookie 一律不動。
+
 **同一台機器，兩半都在。** 往上丟的 `path` 是 dsh 行程自己看到的路徑，所以 VS Code 要開得到同一個檔案系統 —— 本機 `dsh web` 配本機視窗，或 Remote／WSL／容器視窗的遠端就是 dsh 跑的那台。本機 dsh 配遠端視窗，會丟出那個遠端碰不到的路徑。
 
 ## 安裝
@@ -172,7 +174,7 @@ dsh plugin --profile web add link:/absolute/path/to/dsh-vscode-bridge
 
 ## 狀態
 
-早期預覽，`0.2.x`。這個組合包刻意保持小：寫一個檔案、回答一條判定路由、往上丟兩種訊息。它不啟動任何程式，也沒有自己的 VS Code 偵測。
+早期預覽，`0.3.x`。這個組合包刻意保持小：寫一個檔案、回答一條判定路由、往上丟兩種訊息。它不啟動任何程式，也沒有自己的 VS Code 偵測。
 
 ## 授權
 

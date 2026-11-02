@@ -38,6 +38,8 @@ Both answers belong in the DSH runtime rather than in the launcher. This bundle 
 | DeepSeek Harness (`@deepseek-ai/dsh`) | the runtime this bundle is installed into; `dsh plugin` needs `pnpm` on `PATH` |
 | [rainfishs/dsh-vscode](https://github.com/rainfishs/dsh-vscode) | the VS Code side: it embeds the GUI and receives the two hand-offs; without it, files stay in the document preview and copies stay inside the page |
 
+`0.3.0` is the DSH 0.2 compatibility pass. It was checked against 0.2.1: `webServer.register`/`port`, `connection.authenticatedUrl`/`authorizeIndex`/`requestRejection`, the exact-route handler shape, and the client `sidebarRight`/`remote.workspaceFiles` names all keep their 0.1 meanings. The one behavioural change is the cookie rewrite: 0.2 appends `; Secure` itself when the listener serves TLS, so the widening now leaves exactly one `Secure` instead of two, and it no longer touches cookies that carry no `SameSite`.
+
 No build step and no dependencies of its own: the package ships the sources it runs.
 
 **One machine, both halves.** A posted `path` is the host path the dsh process itself sees, so VS Code must open that same filesystem — a local window for a local `dsh web`, or a Remote/WSL/container window whose remote is the machine dsh runs on. A Windows-local dsh paneled into a remote window would name a path that remote cannot reach.
@@ -172,7 +174,7 @@ A `link:` install points the profile at your checkout, so editing `index.js` is 
 
 ## Status
 
-Early preview, `0.2.x`. The bundle stays small on purpose: it writes a file, answers one verdict route, and posts two kinds of messages upwards. It does not launch anything and holds no VS Code detection of its own.
+Early preview, `0.3.x`. The bundle stays small on purpose: it writes a file, answers one verdict route, and posts two kinds of messages upwards. It does not launch anything and holds no VS Code detection of its own.
 
 ## License
 

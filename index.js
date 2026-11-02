@@ -86,7 +86,13 @@ const PATCHED_CONNECTIONS = new WeakSet()
 
 /** Widen one Set-Cookie value, preserving the array shape node accepts. */
 function widenSetCookie(value) {
-  if (typeof value === 'string') return value.replaceAll('SameSite=Strict', 'SameSite=None; Secure')
+  if (typeof value === 'string') {
+    // 只動 Strict 的 session cookie；其他 cookie 原樣通過。
+    // 0.2 起 Connection 自己會依 listener 的協定追加 `; Secure`，
+    // 所以先拿掉再補一次，免得寫出兩個 Secure 屬性。
+    if (!value.includes('SameSite=Strict')) return value
+    return `${value.replaceAll('SameSite=Strict', 'SameSite=None').replace(/;\s*Secure/gi, '')}; Secure`
+  }
   if (Array.isArray(value)) return value.map((entry) => widenSetCookie(entry))
   return value
 }
@@ -136,7 +142,8 @@ function widenBrowserCookie(ctx) {
   if (connection === undefined || PATCHED_CONNECTIONS.has(connection)) return
   PATCHED_CONNECTIONS.add(connection)
   const original = connection.authorizeIndex.bind(connection)
-  connection.authorizeIndex = (req, res) => original(req, wideningResponse(res))
+  // 多餘的參數照傳：0.2 的 Connection 會在內部依 listener 的協定決定 `secure`。
+  connection.authorizeIndex = (req, res, ...rest) => original(req, wideningResponse(res), ...rest)
   ctx.effect(() => () => {
     PATCHED_CONNECTIONS.delete(connection)
     delete connection.authorizeIndex
